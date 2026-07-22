@@ -423,10 +423,13 @@ class Analysis:
         stats = self.view_stats(view)
         groups = {}
         grand = 0.0
+        matched = 0.0
         for path, s in stats.items():
             grand += s["in"] + s["out"]
+            hit = False
             for i, seg in enumerate(path):
                 if q in seg.lower():
+                    hit = True
                     key = path[: i + 1]
                     g = groups.setdefault(key, {"c": 0, "i": 0.0, "o": 0.0, "more": False})
                     g["c"] += s["calls"]
@@ -434,11 +437,14 @@ class Analysis:
                     g["o"] += s["out"]
                     if len(path) > i + 1:
                         g["more"] = True
+            if hit:
+                matched += s["in"] + s["out"]
         rows = [{"path": list(k), "n": k[-1], "c": g["c"], "i": round(g["i"]),
                  "o": round(g["o"]), "more": g["more"]}
                 for k, g in groups.items()]
         rows.sort(key=lambda r: -(r["i"] + r["o"]))
-        return {"total": round(grand), "rows": rows[:limit], "matches": len(rows)}
+        return {"total": round(grand), "rows": rows[:limit], "matches": len(rows),
+                "matched_total": round(matched)}
 
 
 # ---------------------------------------------------------------- scopes
@@ -770,17 +776,22 @@ async function apiSearch(term, v) {
   if (BOOT.mode === "static") {
     const q = term.toLowerCase();
     const rows = [];
-    const walk = (node, path) => {
+    let matchedTotal = 0;
+    const walk = (node, path, covered) => {
       for (const c of node.ch) {
         const p = [...path, c.n];
-        if (c.n.toLowerCase().includes(q))
+        const hit = c.n.toLowerCase().includes(q);
+        if (hit) {
           rows.push({ path: p, n: c.n, c: c.c, i: c.i, o: c.o, more: c.ch.length > 0 });
-        walk(c, p);
+          if (!covered) matchedTotal += c.i + c.o;
+        }
+        walk(c, p, covered || hit);
       }
     };
-    walk(BOOT.trees[v], []);
+    walk(BOOT.trees[v], [], false);
     rows.sort((a, b) => (b.i + b.o) - (a.i + a.o));
-    return { total: BOOT.trees[v].i + BOOT.trees[v].o, rows: rows.slice(0, 60), matches: rows.length };
+    return { total: BOOT.trees[v].i + BOOT.trees[v].o, rows: rows.slice(0, 60),
+             matches: rows.length, matched_total: matchedTotal };
   }
   const r = await fetch("/api/search?q=" + encodeURIComponent(term) + "&view=" + v);
   return r.json();
@@ -888,8 +899,10 @@ async function renderSearch() {
   try { data = await apiSearch(searchQ, view); } finally { loading(false); }
 
   const total = data.total || 1;
+  const mpct = 100 * data.matched_total / (data.total || 1);
   document.getElementById("scope-total").innerHTML =
-    `<b>${fmt(data.matches)}</b> matching node${data.matches === 1 ? "" : "s"}`;
+    `<b>${fmt(data.matches)}</b> match${data.matches === 1 ? "" : "es"} · ` +
+    `<b>${fmt(data.matched_total)}</b> tok (${mpct >= 0.1 ? mpct.toFixed(1) : "<0.1"}%)`;
 
   const rows = data.rows;
   const max = rows.length ? rows[0].i + rows[0].o : 1;
