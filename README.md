@@ -1,86 +1,36 @@
 # tokenspend
 
-Where do your billed Claude Code tokens actually go — per tool, per CLI command, per file?
+Where do your billed Claude Code tokens go — per project, tool, command, file.
+Parses `~/.claude/projects/**/*.jsonl` locally. Python 3 stdlib only, nothing leaves your machine.
 
-`tokenspend` parses your local Claude Code session transcripts (`~/.claude/projects/**/*.jsonl`)
-and attributes **real billed token usage** (from the API's own `usage` fields, not estimates)
-to a drillable hierarchy:
-
-```
-project → tool → command → argument
-loco    → Bash: git → add → -A
-loco    → Edit → ~/code/loco → web → src → App.tsx
-blog    → (session start) → CLAUDE.md
-```
-
-## Quick start
-
-No install, no dependencies (Python 3 stdlib only) — run it straight from GitHub:
+## Run
 
 ```bash
+# interactive report (macOS/Linux, opens your browser)
 curl -fsSL https://raw.githubusercontent.com/taranek/tokenspend/master/token-spend.py | python3 - --all --serve
-```
 
-Works on macOS and Linux. This parses all your Claude Code projects, starts a local
-server, and opens the interactive report in your default browser (`open` on macOS,
-`xdg-open` on Linux — if no browser can be opened, visit the printed URL). If the
-default port 8765 is taken, a free one is picked automatically.
-
-Prefer data over pixels? Generate the full detailed report as JSON instead:
-
-```bash
+# detailed JSON report
 curl -fsSL https://raw.githubusercontent.com/taranek/tokenspend/master/token-spend.py | python3 - --all --json tokenspend.json
 ```
 
-The JSON contains billed totals plus the complete attribution tree (both the
-plain-args and by-directory groupings) with `name` / `calls` / `input_tokens` /
-`output_tokens` / `total_tokens` / `children` at every level. Use `--json -`
-to stream it to stdout for piping into `jq`.
-
-## Usage
+## Flags
 
 ```bash
-./token-spend.py                    # text report: project inferred from $PWD
-./token-spend.py --serve            # interactive report at http://127.0.0.1:8765
-./token-spend.py --all --serve      # every project, lazy-loaded drill-down
-./token-spend.py --project loco     # match project dir by substring
-./token-spend.py --last             # most recent session only
-./token-spend.py --html report.html # static self-contained export (data embedded)
+./token-spend.py                      # text report for the project in $PWD
+./token-spend.py --all                # every project
+./token-spend.py --project loco       # project dir matching substring
+./token-spend.py --last               # most recent session only
+./token-spend.py --serve              # interactive web report (lazy-loaded drill-down, search)
+./token-spend.py --serve --port 9000  # custom port (falls back to a free one if busy)
+./token-spend.py --serve --no-open    # don't auto-open the browser
+./token-spend.py --html report.html   # static self-contained export
+./token-spend.py --json -             # JSON to stdout, pipe into jq
+./token-spend.py --top 30             # more rows in text mode
+./token-spend.py path/to/session.jsonl  # explicit transcript files
 ```
 
-No dependencies — Python 3 stdlib only. The interactive report is a single dark,
-Linear-styled page: stacked in/out bars, breadcrumbs, an `args / by directory`
-toggle that regroups path-like arguments into a drillable directory tree, and
-lazy per-level loading served by a tiny built-in HTTP server.
+## How
 
-## How attribution works
-
-Each assistant message in a transcript carries the exact usage the API billed for
-that call. `input_tokens + cache_creation_input_tokens` is the **new** prompt
-content tokenized on that call. The only new content since the previous call is
-(a) the previous call's own output — known exactly via its `output_tokens` — and
-(b) the tool results and messages injected in between. So:
-
-```
-tool-result tokens ≈ new_input − previous_output
-```
-
-measured by Anthropic's own tokenizer, split proportionally by size when several
-tool results land between two calls. Output tokens are likewise split across each
-call's text vs tool-call blocks, so the cost of *writing* a large `Write` or
-`Edit` is attributed too.
-
-The **(session start)** bucket is itemized the same way: the first call's new
-input covers the system prompt, CLAUDE.md, memory, attachments, and the first
-user message. Known pieces are sized from the transcript; CLAUDE.md and
-`MEMORY.md` rows are estimated from the files as they exist on disk today, and
-the remainder is labeled "base system prompt".
-
-### Caveats
-
-- Cache reads (re-reading history on every call at ~0.1× price) are shown in the
-  totals but not attributed per-tool — note that early-session content is
-  re-read hundreds of times, so session-start tokens are the most amplified.
-- Session-start CLAUDE.md/memory rows use current file sizes (chars ÷ 4), not
-  the sizes at the time the sessions ran.
-- Skill payloads injected as user-role turns show up under "(user messages)".
+- Real billed usage from transcript `usage` fields: per API call, `input + cache_creation` minus the previous call's `output` ≈ the tool results injected in between.
+- Session start is itemized: CLAUDE.md and memory rows estimated from current file sizes; remainder is the base system prompt.
+- Cache reads (~0.1× re-reads of history on every call) are shown in totals, not attributed per node.

@@ -582,17 +582,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     color: var(--acc-bright); font-size: 12.5px; font-weight: 510; padding: 4px 10px;
     background: var(--acc-tint); border-radius: 999px;
   }
+  .searchwrap { position: relative; margin-left: auto; }
   #search {
-    margin-left: auto; width: 190px;
+    width: 190px;
     background: #ffffff08; border: 1px solid transparent; border-radius: 6px;
     font: inherit; font-size: 12.5px; color: var(--fg);
-    padding: 4px 9px; outline: none;
+    padding: 4px 26px 4px 9px; outline: none;
   }
+  #search-clear {
+    position: absolute; right: 4px; top: 50%; translate: 0 -50%;
+    width: 18px; height: 18px; border: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; color: var(--faint); cursor: pointer;
+    font-size: 10px; line-height: 1; padding: 0;
+  }
+  #search-clear:hover { background: #ffffff0d; color: var(--fg); }
+  #search:placeholder-shown + #search-clear { display: none; }
   #search::placeholder { color: var(--faint); }
   #search:focus { border-color: var(--border); background: #ffffff0d; }
   #search::-webkit-search-cancel-button { -webkit-appearance: none; }
   .name .rowpath { color: var(--faint); font-size: 11px; margin-left: 8px; font-weight: 400; }
-  .scope-total { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scope-total { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: auto; }
   .scope-total b { color: var(--fg); font-weight: 590; }
 
   .legend {
@@ -604,7 +614,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .legend .li i { background: var(--acc); }
   .legend .lo i { background: var(--acc2); }
   .seg {
-    display: flex; gap: 2px; margin-left: auto;
+    display: flex; gap: 2px; margin-left: 14px;
     background: #ffffff08; border-radius: 999px; padding: 2px;
   }
   .seg button {
@@ -694,12 +704,15 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <main class="panel">
   <div class="scope-line">
     <nav id="crumbs"></nav>
-    <input id="search" type="search" placeholder="Search…  /" spellcheck="false" autocomplete="off">
-    <div class="scope-total" id="scope-total"></div>
+    <div class="searchwrap">
+      <input id="search" type="search" placeholder="Search…  /" spellcheck="false" autocomplete="off">
+      <button id="search-clear" title="Clear (Esc)" aria-label="Clear search">✕</button>
+    </div>
   </div>
   <div class="legend">
     <span class="li"><i></i>in — tool result entering context</span>
     <span class="lo"><i></i>out — writing the call (args)</span>
+    <div class="scope-total" id="scope-total"></div>
     <div class="seg" id="viewseg" title="how path-like arguments are grouped">
       <button data-v="plain" class="active">args</button>
       <button data-v="dir">by directory</button>
@@ -922,6 +935,9 @@ searchEl.addEventListener("input", () => {
 });
 searchEl.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { searchEl.value = ""; searchQ = ""; searchEl.blur(); render(); }
+});
+document.getElementById("search-clear").addEventListener("click", () => {
+  searchEl.value = ""; searchQ = ""; searchEl.focus(); render();
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "/" && document.activeElement !== searchEl) { e.preventDefault(); searchEl.focus(); }
