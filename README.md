@@ -13,6 +13,16 @@ loco    → Edit → ~/code/loco → web → src → App.tsx
 blog    → (session start) → CLAUDE.md
 ```
 
+## Quick start
+
+No install, no dependencies (Python 3 stdlib only) — run it straight from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/taranek/tokenspend/master/token-spend.py | python3 - --all --serve
+```
+
+This parses all your Claude Code projects and opens the interactive report in your browser.
+
 ## Usage
 
 ```bash
