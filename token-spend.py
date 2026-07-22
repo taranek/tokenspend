@@ -417,6 +417,29 @@ class Analysis:
         rows.sort(key=lambda r: -(r["i"] + r["o"]))
         return {"total": round(total), "rows": rows}
 
+    def search(self, q, view="plain", limit=60):
+        """Nodes anywhere in the tree whose segment contains q (case-insensitive)."""
+        q = q.lower()
+        stats = self.view_stats(view)
+        groups = {}
+        grand = 0.0
+        for path, s in stats.items():
+            grand += s["in"] + s["out"]
+            for i, seg in enumerate(path):
+                if q in seg.lower():
+                    key = path[: i + 1]
+                    g = groups.setdefault(key, {"c": 0, "i": 0.0, "o": 0.0, "more": False})
+                    g["c"] += s["calls"]
+                    g["i"] += s["in"]
+                    g["o"] += s["out"]
+                    if len(path) > i + 1:
+                        g["more"] = True
+        rows = [{"path": list(k), "n": k[-1], "c": g["c"], "i": round(g["i"]),
+                 "o": round(g["o"]), "more": g["more"]}
+                for k, g in groups.items()]
+        rows.sort(key=lambda r: -(r["i"] + r["o"]))
+        return {"total": round(grand), "rows": rows[:limit], "matches": len(rows)}
+
 
 # ---------------------------------------------------------------- scopes
 
@@ -559,6 +582,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     color: var(--acc-bright); font-size: 12.5px; font-weight: 510; padding: 4px 10px;
     background: var(--acc-tint); border-radius: 999px;
   }
+  #search {
+    margin-left: auto; width: 190px;
+    background: #ffffff08; border: 1px solid transparent; border-radius: 6px;
+    font: inherit; font-size: 12.5px; color: var(--fg);
+    padding: 4px 9px; outline: none;
+  }
+  #search::placeholder { color: var(--faint); }
+  #search:focus { border-color: var(--border); background: #ffffff0d; }
+  #search::-webkit-search-cancel-button { -webkit-appearance: none; }
+  .name .rowpath { color: var(--faint); font-size: 11px; margin-left: 8px; font-weight: 400; }
   .scope-total { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .scope-total b { color: var(--fg); font-weight: 590; }
 
@@ -661,6 +694,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <main class="panel">
   <div class="scope-line">
     <nav id="crumbs"></nav>
+    <input id="search" type="search" placeholder="Search…  /" spellcheck="false" autocomplete="off">
     <div class="scope-total" id="scope-total"></div>
   </div>
   <div class="legend">
@@ -719,6 +753,26 @@ async function apiSummary() {
   return r.json();
 }
 
+async function apiSearch(term, v) {
+  if (BOOT.mode === "static") {
+    const q = term.toLowerCase();
+    const rows = [];
+    const walk = (node, path) => {
+      for (const c of node.ch) {
+        const p = [...path, c.n];
+        if (c.n.toLowerCase().includes(q))
+          rows.push({ path: p, n: c.n, c: c.c, i: c.i, o: c.o, more: c.ch.length > 0 });
+        walk(c, p);
+      }
+    };
+    walk(BOOT.trees[v], []);
+    rows.sort((a, b) => (b.i + b.o) - (a.i + a.o));
+    return { total: BOOT.trees[v].i + BOOT.trees[v].o, rows: rows.slice(0, 60), matches: rows.length };
+  }
+  const r = await fetch("/api/search?q=" + encodeURIComponent(term) + "&view=" + v);
+  return r.json();
+}
+
 async function apiChildren(path, v) {
   if (BOOT.mode === "static") {
     let node = BOOT.trees[v];
@@ -736,6 +790,7 @@ async function apiChildren(path, v) {
 // ---- rendering ----
 let stack = [];        // segments of the current drill path
 let view = "plain";    // "plain" args vs "dir" (paths exploded by directory)
+let searchQ = "";      // active search term ("" = normal drill view)
 const cache = new Map();
 
 async function level(path) {
@@ -777,6 +832,7 @@ function renderCrumbs() {
 }
 
 async function render() {
+  if (searchQ.length >= 2) return renderSearch();
   renderCrumbs();
   loading(true, stack.length ? "loading level" : "crunching transcripts");
   let data;
@@ -810,6 +866,66 @@ async function render() {
     ? "▸ click a row to drill into the next argument level — breadcrumbs to go back"
     : "leaf level — nothing deeper here";
 }
+
+async function renderSearch() {
+  document.getElementById("crumbs").innerHTML =
+    `<span class="here">search: ${esc(searchQ)}</span>`;
+  loading(true, "searching");
+  let data;
+  try { data = await apiSearch(searchQ, view); } finally { loading(false); }
+
+  const total = data.total || 1;
+  document.getElementById("scope-total").innerHTML =
+    `<b>${fmt(data.matches)}</b> matching node${data.matches === 1 ? "" : "s"}`;
+
+  const rows = data.rows;
+  const max = rows.length ? rows[0].i + rows[0].o : 1;
+  const ul = document.getElementById("rows");
+  ul.innerHTML = rows.map((r, idx) => {
+    const t = r.i + r.o;
+    const pct = 100 * t / total;
+    const parents = r.path.slice(0, -1).join(" / ");
+    return `<li class="row deeper" data-idx="${idx}" style="animation-delay:${Math.min(idx * 12, 300)}ms">
+      <div class="name"><span class="arrow">${r.more ? "▸" : "·"}</span>${esc(r.n)}${r.c ? `<span class="calls">×${fmt(r.c)}</span>` : ""}${parents ? `<span class="rowpath">${esc(parents)}</span>` : ""}</div>
+      <div class="bar-track"><div class="bar" data-w="${(100 * t / max).toFixed(2)}">
+        <div class="seg-in" style="flex:${r.i}"></div><div class="seg-out" style="flex:${r.o}"></div>
+      </div></div>
+      <div class="nums"><span class="pct">${pct >= 0.1 ? pct.toFixed(1) : "<0.1"}%</span> <b>${fmtK(t)}</b> <span class="tok">tok</span></div>
+    </li>`;
+  }).join("");
+
+  ul.querySelectorAll(".row").forEach(li =>
+    li.addEventListener("click", () => {
+      const r = rows[+li.dataset.idx];
+      stack = r.more ? r.path : r.path.slice(0, -1);
+      searchQ = "";
+      document.getElementById("search").value = "";
+      render();
+    }));
+
+  requestAnimationFrame(() => requestAnimationFrame(() =>
+    ul.querySelectorAll(".bar").forEach(b => { b.style.width = b.dataset.w + "%"; })));
+
+  document.getElementById("hint").textContent = rows.length
+    ? "click a result to jump to it in the tree — clear the search to go back"
+    : "no nodes match — token totals are searched by name at every level";
+}
+
+const searchEl = document.getElementById("search");
+let searchTimer = null;
+searchEl.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    searchQ = searchEl.value.trim();
+    render();
+  }, 180);
+});
+searchEl.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { searchEl.value = ""; searchQ = ""; searchEl.blur(); render(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement !== searchEl) { e.preventDefault(); searchEl.focus(); }
+});
 
 async function boot() {
   loading(true, "crunching transcripts");
@@ -938,6 +1054,13 @@ def serve(analysis, port, open_browser=True):
                     path = json.loads(q.get("path", ["[]"])[0])
                     view = q.get("view", ["plain"])[0]
                     body = json.dumps(analysis.children(path, view)).encode()
+                    self._send(body, "application/json")
+                elif url.path == "/api/search":
+                    analysis.ensure()
+                    q = parse_qs(url.query)
+                    term = q.get("q", [""])[0]
+                    view = q.get("view", ["plain"])[0]
+                    body = json.dumps(analysis.search(term, view)).encode()
                     self._send(body, "application/json")
                 else:
                     self.send_error(404)
