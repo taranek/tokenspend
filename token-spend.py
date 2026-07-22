@@ -22,6 +22,7 @@ Usage:
   token-spend.py --serve              # interactive report, lazy-loaded levels (recommended)
   token-spend.py --all --serve
   token-spend.py --html [FILE]        # static self-contained report (data embedded)
+  token-spend.py --json [FILE]        # full detailed report as JSON ('-' for stdout)
   token-spend.py --project blog --last
 """
 import argparse
@@ -859,6 +860,52 @@ def write_static_html(analysis, out_path):
     Path(out_path).write_text(render_html(boot), encoding="utf-8")
 
 
+# ---------------------------------------------------------------- json export
+
+def write_json_report(analysis, out_path):
+    analysis.ensure()
+
+    def readable(node):
+        out = {
+            "name": node["n"],
+            "calls": node["c"],
+            "input_tokens": node["i"],
+            "output_tokens": node["o"],
+            "total_tokens": node["i"] + node["o"],
+        }
+        if node["ch"]:
+            out["children"] = [readable(c) for c in node["ch"]]
+        return out
+
+    t = analysis.totals
+    report = {
+        "generator": "tokenspend (https://github.com/taranek/tokenspend)",
+        "scope": analysis.scope,
+        "session_files": len(analysis.jobs),
+        "api_calls": t["api_calls"],
+        "billed_totals": {
+            "output_tokens": t["output"],
+            "fresh_input_tokens": t["input"],
+            "cache_write_tokens": t["cache_write"],
+            "cache_read_tokens": t["cache_read"],
+        },
+        "notes": [
+            "attribution: per API call, input+cache_creation minus the previous call's "
+            "output is attributed to the tool results injected between the two calls",
+            "cache reads are in billed_totals but not attributed per node",
+            "session-start CLAUDE.md/memory rows are estimated from current file sizes",
+        ],
+        "attribution": readable(full_tree(analysis, "plain")),
+        "attribution_by_directory": readable(full_tree(analysis, "dir")),
+    }
+    body = json.dumps(report, indent=2)
+    if out_path == "-":
+        print(body)
+    else:
+        Path(out_path).write_text(body + "\n", encoding="utf-8")
+        print(f"JSON report written to {Path(out_path).resolve()}")
+
+
 # ---------------------------------------------------------------- server
 
 def serve(analysis, port, open_browser=True):
@@ -931,6 +978,8 @@ def main():
     ap.add_argument("--no-open", action="store_true", help="don't auto-open the browser")
     ap.add_argument("--html", nargs="?", const="token-spend.html", metavar="FILE",
                     help="write a static self-contained report instead (data embedded)")
+    ap.add_argument("--json", nargs="?", const="token-spend.json", metavar="FILE",
+                    help="write the full detailed report as JSON (use '-' for stdout)")
     args = ap.parse_args()
 
     def project_label(dirname):
@@ -974,6 +1023,8 @@ def main():
     elif args.html:
         write_static_html(analysis, args.html)
         print(f"report written to {Path(args.html).resolve()}")
+    elif args.json:
+        write_json_report(analysis, args.json)
     else:
         print_text_report(analysis, args.top)
 

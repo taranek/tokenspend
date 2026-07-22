@@ -26,6 +26,17 @@ server, and opens the interactive report in your default browser (`open` on macO
 `xdg-open` on Linux — if no browser can be opened, visit the printed URL). If the
 default port 8765 is taken, a free one is picked automatically.
 
+Prefer data over pixels? Generate the full detailed report as JSON instead:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/taranek/tokenspend/master/token-spend.py | python3 - --all --json tokenspend.json
+```
+
+The JSON contains billed totals plus the complete attribution tree (both the
+plain-args and by-directory groupings) with `name` / `calls` / `input_tokens` /
+`output_tokens` / `total_tokens` / `children` at every level. Use `--json -`
+to stream it to stdout for piping into `jq`.
+
 ## Usage
 
 ```bash
