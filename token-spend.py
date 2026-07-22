@@ -705,7 +705,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div class="scope-line">
     <nav id="crumbs"></nav>
     <div class="searchwrap">
-      <input id="search" type="search" placeholder="Search…  /" spellcheck="false" autocomplete="off">
+      <input id="search" type="search" placeholder="Search…  /" spellcheck="false" autocomplete="off" autofocus>
       <button id="search-clear" title="Clear (Esc)" aria-label="Clear search">✕</button>
     </div>
   </div>
