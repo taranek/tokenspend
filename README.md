@@ -5,11 +5,15 @@ Parses `~/.claude/projects/**/*.jsonl` locally. Python 3 stdlib only, nothing le
 
 ## Run
 
-```bash
-# interactive report (macOS/Linux, opens your browser)
-curl -fsSL https://raw.githubusercontent.com/taranek/tokenspend/master/token-spend.py | python3 - --all --serve
+Interactive report (macOS/Linux, opens your browser):
 
-# detailed JSON report
+```bash
+curl -fsSL https://raw.githubusercontent.com/taranek/tokenspend/master/token-spend.py | python3 - --all --serve
+```
+
+Detailed JSON report:
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/taranek/tokenspend/master/token-spend.py | python3 - --all --json tokenspend.json
 ```
 
