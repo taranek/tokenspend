@@ -899,10 +899,16 @@ def serve(analysis, port, open_browser=True):
             except Exception as e:
                 self.send_error(500, str(e))
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = f"http://127.0.0.1:{port}/"
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError:
+        # requested port is busy — let the OS pick a free one
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
     print(f"serving {analysis.scope} at {url}  (ctrl-c to stop)")
     if open_browser:
+        # webbrowser uses `open` on macOS and xdg-open/$BROWSER on Linux;
+        # if neither can open a window, the printed URL above is the fallback
         threading.Timer(0.3, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()

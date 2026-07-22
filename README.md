@@ -21,7 +21,10 @@ No install, no dependencies (Python 3 stdlib only) — run it straight from GitH
 curl -fsSL https://raw.githubusercontent.com/taranek/tokenspend/master/token-spend.py | python3 - --all --serve
 ```
 
-This parses all your Claude Code projects and opens the interactive report in your browser.
+Works on macOS and Linux. This parses all your Claude Code projects, starts a local
+server, and opens the interactive report in your default browser (`open` on macOS,
+`xdg-open` on Linux — if no browser can be opened, visit the printed URL). If the
+default port 8765 is taken, a free one is picked automatically.
 
 ## Usage
 
